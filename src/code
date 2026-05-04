@@ -1,0 +1,605 @@
+import java.util.*;
+
+// ─────────────────────────────────────────────
+//  INTERFACES
+// ─────────────────────────────────────────────
+
+interface Notifiable {
+    void receiveNotification(String message);
+}
+
+interface Trackable {
+    String getStatus();
+}
+
+// ─────────────────────────────────────────────
+//  ABSTRACT CLASS — User
+// ─────────────────────────────────────────────
+
+abstract class User implements Notifiable {
+    protected String name;
+    protected String userId;
+    protected String password;
+
+    public User(String name, String userId, String password) {
+        this.name     = name;
+        this.userId   = userId;
+        this.password = password;
+    }
+
+    public boolean login(String enteredId, String enteredPassword) {
+        return this.userId.equals(enteredId) && this.password.equals(enteredPassword);
+    }
+
+    public String getName()   { return name; }
+    public String getUserId() { return userId; }
+
+    public abstract void showDashboard();
+}
+
+
+class BookingRecord implements Trackable {
+    private static int idCounter = 1000;
+
+    final String bookingId;
+    final String customerId;
+    double weightKg;
+    String pickupLocation;
+    String destination;
+    String status;          // "PENDING","ASSIGNED","CONFIRMED","IN_PROGRESS","COMPLETED"
+    String assignedDriverId;
+    double fareAmount;
+
+    BookingRecord(String customerId, double weightKg,
+                  String pickupLocation, String destination) {
+        this.bookingId      = "BK" + (++idCounter);
+        this.customerId     = customerId;
+        this.weightKg       = weightKg;
+        this.pickupLocation = pickupLocation;
+        this.destination    = destination;
+        this.status         = "PENDING";
+        this.fareAmount     = 0.0;
+    }
+
+    @Override
+    public String getStatus() { return status; }
+
+    @Override
+    public String toString() {
+        return String.format("[%s] %.1f kg | %s → %s | %s | ₹%.2f",
+            bookingId, weightKg, pickupLocation, destination, status, fareAmount);
+    }
+}
+
+// ─────────────────────────────────────────────
+//  CLASS — Customer
+// ─────────────────────────────────────────────
+
+class Customer extends User {
+
+    private final List<BookingRecord> myBookings = new ArrayList<>();
+    private final List<String>        inbox      = new ArrayList<>();
+
+    public Customer(String name, String userId, String password) {
+        super(name, userId, password);
+    }
+
+    public BookingRecord placeBooking(Scanner sc) {
+        System.out.print("Enter pickup location: ");
+        String pickup = sc.nextLine();
+        System.out.print("Enter destination: ");
+        String dest = sc.nextLine();
+        System.out.print("Enter weight of goods (kg): ");
+        double weight = Double.parseDouble(sc.nextLine());
+
+        BookingRecord b = new BookingRecord(userId, weight, pickup, dest);
+        myBookings.add(b);
+        System.out.println("[Customer] Booking placed: " + b);
+        return b;
+    }
+
+    public void checkLocation(BookingRecord b) {
+        switch (b.status) {
+            case "IN_PROGRESS":
+                System.out.println("[Customer] Your goods are currently in transit."); break;
+            case "CONFIRMED":
+                System.out.println("[Customer] Driver confirmed — journey starting soon!"); break;
+            case "ASSIGNED":
+                System.out.println("[Customer] Driver assigned, awaiting confirmation."); break;
+            case "COMPLETED":
+                System.out.println("[Customer] Delivery is already completed. Thank you!"); break;
+            default:
+                System.out.println("[Customer] Booking is still pending.");
+        }
+    }
+
+    public void viewBookings() {
+        System.out.println("\n── Your Bookings ──");
+        if (myBookings.isEmpty()) { System.out.println("  (none)"); return; }
+        myBookings.forEach(b -> System.out.println("  " + b));
+    }
+
+    public List<BookingRecord> getMyBookings() { return myBookings; }
+
+    public void viewInbox() {
+        System.out.println("\n── Inbox ──");
+        if (inbox.isEmpty()) { System.out.println("  (empty)"); return; }
+        inbox.forEach(m -> System.out.println("  " + m));
+    }
+
+    @Override
+    public void receiveNotification(String message) {
+        inbox.add(message);
+        System.out.println("[NOTIFICATION → " + name + "] " + message);
+    }
+
+    @Override
+    public void showDashboard() {
+        System.out.println("\n╔══ Customer Dashboard — " + name + " ══╗");
+        System.out.println("  1. Place Booking");
+        System.out.println("  2. Check Location");
+        System.out.println("  3. View My Bookings");
+        System.out.println("  4. View Inbox");
+        System.out.println("  0. Logout");
+        System.out.println("╚═══════════════════════════════╝");
+    }
+}
+
+// ─────────────────────────────────────────────
+//  CLASS — Driver
+// ─────────────────────────────────────────────
+
+class Driver extends User {
+
+    private final List<BookingRecord> assignedTrips = new ArrayList<>();
+    private final List<String>        inbox         = new ArrayList<>();
+    private boolean                   isAvailable   = true;
+
+    public Driver(String name, String userId, String password) {
+        super(name, userId, password);
+    }
+
+    public boolean isAvailable() { return isAvailable; }
+
+    public void viewAssignedTrips() {
+        System.out.println("\n── Assigned Trips for " + name + " ──");
+        if (assignedTrips.isEmpty()) { System.out.println("  (none)"); return; }
+        for (int i = 0; i < assignedTrips.size(); i++)
+            System.out.println("  [" + i + "] " + assignedTrips.get(i));
+    }
+
+    public void acceptBooking(Scanner sc, Admin admin, Customer customer) {
+        viewAssignedTrips();
+        if (assignedTrips.isEmpty()) return;
+        System.out.print("Enter index of booking to confirm: ");
+        int idx = Integer.parseInt(sc.nextLine());
+        BookingRecord b = assignedTrips.get(idx);
+
+        b.status = "CONFIRMED";
+        isAvailable = false;
+        System.out.println("[Driver] " + name + " confirmed booking " + b.bookingId);
+
+        customer.receiveNotification("Booking " + b.bookingId +
+            " CONFIRMED by driver " + name + ". Journey starting soon.");
+        admin.receiveNotification("Driver " + name +
+            " confirmed booking " + b.bookingId);
+    }
+
+    public void startJourney(Scanner sc, Customer customer) {
+        viewAssignedTrips();
+        if (assignedTrips.isEmpty()) return;
+        System.out.print("Enter index of booking to start: ");
+        int idx = Integer.parseInt(sc.nextLine());
+        BookingRecord b = assignedTrips.get(idx);
+
+        if (!b.status.equals("CONFIRMED")) {
+            System.out.println("[Driver] Cannot start — booking not confirmed yet."); return;
+        }
+        b.status = "IN_PROGRESS";
+        System.out.println("[Driver] Journey started for " + b.bookingId);
+        customer.receiveNotification("Booking " + b.bookingId +
+            " is IN PROGRESS. Driver " + name + " has started.");
+    }
+
+    public void markDelivered(Scanner sc, Admin admin, Customer customer) {
+        viewAssignedTrips();
+        if (assignedTrips.isEmpty()) return;
+        System.out.print("Enter index of booking to mark delivered: ");
+        int idx = Integer.parseInt(sc.nextLine());
+        BookingRecord b = assignedTrips.get(idx);
+
+        if (!b.status.equals("IN_PROGRESS")) {
+            System.out.println("[Driver] Cannot complete — journey not in progress."); return;
+        }
+        b.status = "COMPLETED";
+        isAvailable = true;
+        System.out.println("[Driver] Booking " + b.bookingId + " marked COMPLETED.");
+
+        admin.receiveNotification("Driver " + name + " completed " + b.bookingId +
+            " | " + b.pickupLocation + " → " + b.destination);
+        customer.receiveNotification("Your goods have been delivered! Booking " +
+            b.bookingId + " COMPLETE. Fare: ₹" + b.fareAmount);
+    }
+
+    public void addAssignedTrip(BookingRecord b) { assignedTrips.add(b); }
+
+    public void viewInbox() {
+        System.out.println("\n── Inbox ──");
+        if (inbox.isEmpty()) { System.out.println("  (empty)"); return; }
+        inbox.forEach(m -> System.out.println("  " + m));
+    }
+
+    @Override
+    public void receiveNotification(String message) {
+        inbox.add(message);
+        System.out.println("[NOTIFICATION → Driver " + name + "] " + message);
+    }
+
+    @Override
+    public void showDashboard() {
+        System.out.println("\n╔══ Driver Dashboard — " + name + " ══╗");
+        System.out.println("  1. View Assigned Trips");
+        System.out.println("  2. Confirm a Booking");
+        System.out.println("  3. Start Journey");
+        System.out.println("  4. Mark Delivered");
+        System.out.println("  5. View Inbox");
+        System.out.println("  0. Logout");
+        System.out.println("╚═══════════════════════════════╝");
+    }
+}
+
+// ─────────────────────────────────────────────
+//  CLASS — Admin
+// ─────────────────────────────────────────────
+
+class Admin extends User {
+
+    private final List<String>        inbox             = new ArrayList<>();
+    private final List<BookingRecord> allBookings       = new ArrayList<>();
+    private final List<Driver>        registeredDrivers = new ArrayList<>();
+
+    private static final double BASE_FARE   = 50.0;
+    private static final double RATE_PER_KM = 10.0;
+    private static final double RATE_PER_KG = 2.0;
+
+    public Admin(String name, String userId, String password) {
+        super(name, userId, password);
+    }
+
+    public void registerDriver(Scanner sc) {
+        System.out.print("Enter driver name: ");
+        String dName = sc.nextLine();
+        System.out.print("Enter driver user ID: ");
+        String dId = sc.nextLine();
+        System.out.print("Enter driver password: ");
+        String dPass = sc.nextLine();
+        Driver d = new Driver(dName, dId, dPass);
+        registeredDrivers.add(d);
+        System.out.println("[Admin] Driver registered: " + dName + " (ID: " + dId + ")");
+    }
+
+    public void receiveBooking(BookingRecord b) {
+        allBookings.add(b);
+        System.out.println("[Admin] Booking received: " + b.bookingId);
+    }
+
+    public void assignDriver(Scanner sc, Customer customer) {
+        if (allBookings.isEmpty()) { System.out.println("[Admin] No bookings."); return; }
+        if (registeredDrivers.isEmpty()) { System.out.println("[Admin] No drivers registered."); return; }
+
+        System.out.println("\n── Pending Bookings ──");
+        for (int i = 0; i < allBookings.size(); i++)
+            System.out.println("  [" + i + "] " + allBookings.get(i));
+        System.out.print("Select booking index: ");
+        int bi = Integer.parseInt(sc.nextLine());
+        BookingRecord b = allBookings.get(bi);
+
+        System.out.println("\n── Available Drivers ──");
+        for (int i = 0; i < registeredDrivers.size(); i++) {
+            Driver d = registeredDrivers.get(i);
+            System.out.println("  [" + i + "] " + d.getName() +
+                " — " + (d.isAvailable() ? "Available" : "Busy"));
+        }
+        System.out.print("Select driver index: ");
+        int di = Integer.parseInt(sc.nextLine());
+        Driver driver = registeredDrivers.get(di);
+
+        if (!driver.isAvailable()) {
+            System.out.println("[Admin] Driver is not available."); return;
+        }
+        b.assignedDriverId = driver.getUserId();
+        b.status = "ASSIGNED";
+        driver.addAssignedTrip(b);
+
+        System.out.println("[Admin] " + driver.getName() + " assigned to " + b.bookingId);
+        driver.receiveNotification("New trip: " + b.bookingId +
+            " | Pickup: " + b.pickupLocation +
+            " | Dest: " + b.destination +
+            " | Weight: " + b.weightKg + " kg. Please confirm.");
+        customer.receiveNotification("Booking " + b.bookingId +
+            " assigned to driver " + driver.getName() + ". Awaiting confirmation.");
+    }
+
+    public void generateFare(Scanner sc, Customer customer) {
+        if (allBookings.isEmpty()) { System.out.println("[Admin] No bookings."); return; }
+        System.out.println("\n── Bookings ──");
+        for (int i = 0; i < allBookings.size(); i++)
+            System.out.println("  [" + i + "] " + allBookings.get(i));
+        System.out.print("Select booking index: ");
+        int bi = Integer.parseInt(sc.nextLine());
+        BookingRecord b = allBookings.get(bi);
+
+        if (b.status.equals("PENDING") || b.status.equals("CANCELLED")) {
+            System.out.println("[Admin] Cannot generate fare for this status."); return;
+        }
+        System.out.print("Enter estimated distance (km): ");
+        double dist = Double.parseDouble(sc.nextLine());
+
+        double fare = BASE_FARE + (dist * RATE_PER_KM) + (b.weightKg * RATE_PER_KG);
+        b.fareAmount = fare;
+        System.out.printf("[Admin] Fare for %s: ₹%.2f%n", b.bookingId, fare);
+
+        customer.receiveNotification("Fare for " + b.bookingId +
+            ": ₹" + String.format("%.2f", fare) +
+            " (Dist: " + dist + " km, Weight: " + b.weightKg + " kg)");
+    }
+
+    public void printBookingDetails(Scanner sc) {
+        if (allBookings.isEmpty()) { System.out.println("[Admin] No bookings."); return; }
+        System.out.println("\n── Bookings ──");
+        for (int i = 0; i < allBookings.size(); i++)
+            System.out.println("  [" + i + "] " + allBookings.get(i));
+        System.out.print("Select booking index: ");
+        int bi = Integer.parseInt(sc.nextLine());
+        BookingRecord b = allBookings.get(bi);
+
+        System.out.println("\n══════════ BOOKING RECEIPT ══════════");
+        System.out.println("  Booking ID   : " + b.bookingId);
+        System.out.println("  Customer ID  : " + b.customerId);
+        System.out.println("  Pickup       : " + b.pickupLocation);
+        System.out.println("  Destination  : " + b.destination);
+        System.out.println("  Weight       : " + b.weightKg + " kg");
+        System.out.println("  Status       : " + b.status);
+        System.out.println("  Assigned To  : " + b.assignedDriverId);
+        System.out.printf( "  Fare         : ₹%.2f%n", b.fareAmount);
+        System.out.println("═════════════════════════════════════");
+    }
+
+    public void viewAllBookings() {
+        System.out.println("\n── All Bookings (Admin View) ──");
+        if (allBookings.isEmpty()) { System.out.println("  (none)"); return; }
+        allBookings.forEach(b -> System.out.println("  " + b));
+    }
+
+    public List<BookingRecord> getAllBookings() { return allBookings; }
+
+    public void viewInbox() {
+        System.out.println("\n── Admin Inbox ──");
+        if (inbox.isEmpty()) { System.out.println("  (empty)"); return; }
+        inbox.forEach(m -> System.out.println("  " + m));
+    }
+
+    @Override
+    public void receiveNotification(String message) {
+        inbox.add(message);
+        System.out.println("[NOTIFICATION → Admin] " + message);
+    }
+
+    @Override
+    public void showDashboard() {
+        System.out.println("\n╔══ Admin Dashboard — " + name + " ══╗");
+        System.out.println("  1. Register Driver");
+        System.out.println("  2. View All Bookings");
+        System.out.println("  3. Assign Driver to Booking");
+        System.out.println("  4. Generate Fare");
+        System.out.println("  5. Print Booking Details");
+        System.out.println("  6. View Inbox");
+        System.out.println("  0. Logout");
+        System.out.println("╚══════════════════════════════════╝");
+    }
+public void registerDriverDirect(Driver driver) {
+    registeredDrivers.add(driver);
+    System.out.println("[Admin] Driver pre-loaded: " + driver.getName());
+}
+}
+
+// ─────────────────────────────────────────────
+//  CLASS — Vehicle  
+// ─────────────────────────────────────────────
+
+class Vehicle {
+    public enum VehicleType { MINI_TRUCK, LARGE_TRUCK, TEMPO }
+
+    private final String      vehicleId;
+    private final VehicleType type;
+    private final double      maxCapacityKg;
+    private double            totalDistanceTravelled;
+    private boolean           isOnTrip;
+
+    public Vehicle(String vehicleId, VehicleType type, double maxCapacityKg) {
+        this.vehicleId  = vehicleId;
+        this.type       = type;
+        this.maxCapacityKg = maxCapacityKg;
+    }
+
+    public boolean canCarry(double weightKg) { return weightKg <= maxCapacityKg; }
+
+    public void startTrip() {
+        isOnTrip = true;
+        System.out.println("[Vehicle " + vehicleId + "] Trip started.");
+    }
+
+    public void completeTrip(double distanceKm) {
+        isOnTrip = false;
+        totalDistanceTravelled += distanceKm;
+        System.out.printf("[Vehicle %s] Trip done. Distance: %.1f km | Total: %.1f km%n",
+            vehicleId, distanceKm, totalDistanceTravelled);
+    }
+
+    @Override
+    public String toString() {
+        return String.format("[%s | %s | Capacity: %.1f kg | Total KM: %.1f | On Trip: %s]",
+            vehicleId, type, maxCapacityKg, totalDistanceTravelled, isOnTrip);
+    }
+}
+
+// ─────────────────────────────────────────────
+//  MAIN — Interactive menu-driven system
+// ─────────────────────────────────────────────
+
+public class GoodsVehicleManagementSystem {
+
+    static Scanner sc = new Scanner(System.in);
+
+    // Pre-created actors (in a real system you'd load from DB)
+    static Admin    admin    = new Admin("Rajesh Kumar", "ADM01", "admin123");
+    static Customer customer = new Customer("Arjun SP",  "CUST01", "cust123");
+    static Driver   driver   = new Driver("Sarvesh S",   "DRV01",  "drv123");
+    static Vehicle  vehicle  = new Vehicle("KL-14-AB-1234", Vehicle.VehicleType.MINI_TRUCK, 1000.0);
+
+    public static void main(String[] args) {
+        // Pre-register the default driver so Admin can assign
+        admin.receiveNotification("System started. Default driver Sarvesh S pre-loaded.");
+        // We manually add the pre-built driver to admin's list via a small helper
+        // (since registerDriver(Scanner) creates a new driver)
+        // Instead we expose a direct register:
+        registerDefaultDriver();
+
+        System.out.println("════════════════════════════════════════");
+        System.out.println("   GOODS VEHICLE MANAGEMENT SYSTEM");
+        System.out.println("════════════════════════════════════════");
+
+        boolean running = true;
+        while (running) {
+            System.out.println("\nSelect role to login:");
+            System.out.println("  1. Admin");
+            System.out.println("  2. Customer");
+            System.out.println("  3. Driver");
+            System.out.println("  0. Exit");
+            System.out.print("Choice: ");
+            String choice = sc.nextLine();
+
+            switch (choice) {
+                case "1": loginAndRunAdmin();    break;
+                case "2": loginAndRunCustomer(); break;
+                case "3": loginAndRunDriver();   break;
+                case "0": running = false;        break;
+                default:  System.out.println("Invalid choice.");
+            }
+        }
+        System.out.println("\nGoodbye!");
+        sc.close();
+    }
+
+    // ── Register pre-built driver into admin's list ──
+    static void registerDefaultDriver() {
+        // Directly use the overloaded version with a Driver object
+        admin.registerDriverDirect(driver);
+    }
+
+    // ── Admin flow ──────────────────────────────────────────────
+    static void loginAndRunAdmin() {
+        System.out.print("Enter Admin ID: ");
+        String id = sc.nextLine();
+        System.out.print("Enter Password: ");
+        String pass = sc.nextLine();
+
+        if (!admin.login(id, pass)) {
+            System.out.println("Login failed."); return;
+        }
+        System.out.println("Admin login successful!");
+
+        boolean active = true;
+        while (active) {
+            admin.showDashboard();
+            System.out.print("Choice: ");
+            String ch = sc.nextLine();
+            switch (ch) {
+                case "1": admin.registerDriver(sc); break;
+                case "2": admin.viewAllBookings();  break;
+                case "3": admin.assignDriver(sc, customer); break;
+                case "4": admin.generateFare(sc, customer); break;
+                case "5": admin.printBookingDetails(sc); break;
+                case "6": admin.viewInbox(); break;
+                case "0": active = false; break;
+                default:  System.out.println("Invalid choice.");
+            }
+        }
+    }
+
+    // ── Customer flow ───────────────────────────────────────────
+    static void loginAndRunCustomer() {
+        System.out.print("Enter Customer ID: ");
+        String id = sc.nextLine();
+        System.out.print("Enter Password: ");
+        String pass = sc.nextLine();
+
+        if (!customer.login(id, pass)) {
+            System.out.println("Login failed."); return;
+        }
+        System.out.println("Customer login successful!");
+
+        boolean active = true;
+        while (active) {
+            customer.showDashboard();
+            System.out.print("Choice: ");
+            String ch = sc.nextLine();
+            switch (ch) {
+                case "1":
+                    BookingRecord b = customer.placeBooking(sc);
+                    admin.receiveBooking(b);
+                    break;
+                case "2":
+                    List<BookingRecord> myB = customer.getMyBookings();
+                    if (myB.isEmpty()) { System.out.println("No bookings yet."); break; }
+                    for (int i = 0; i < myB.size(); i++)
+                        System.out.println("  [" + i + "] " + myB.get(i));
+                    System.out.print("Select booking index: ");
+                    int idx = Integer.parseInt(sc.nextLine());
+                    customer.checkLocation(myB.get(idx));
+                    break;
+                case "3": customer.viewBookings(); break;
+                case "4": customer.viewInbox();    break;
+                case "0": active = false;           break;
+                default:  System.out.println("Invalid choice.");
+            }
+        }
+    }
+
+    // ── Driver flow ─────────────────────────────────────────────
+    static void loginAndRunDriver() {
+        System.out.print("Enter Driver ID: ");
+        String id = sc.nextLine();
+        System.out.print("Enter Password: ");
+        String pass = sc.nextLine();
+
+        if (!driver.login(id, pass)) {
+            System.out.println("Login failed."); return;
+        }
+        System.out.println("Driver login successful!");
+
+        boolean active = true;
+        while (active) {
+            driver.showDashboard();
+            System.out.print("Choice: ");
+            String ch = sc.nextLine();
+            switch (ch) {
+                case "1": driver.viewAssignedTrips(); break;
+                case "2": driver.acceptBooking(sc, admin, customer); break;
+                case "3":
+                    driver.startJourney(sc, customer);
+                    vehicle.startTrip();
+                    break;
+                case "4":
+                    System.out.print("Enter trip distance (km): ");
+                    double dist = Double.parseDouble(sc.nextLine());
+                    vehicle.completeTrip(dist);
+                    driver.markDelivered(sc, admin, customer);
+                    break;
+                case "5": driver.viewInbox(); break;
+                case "0": active = false; break;
+                default:  System.out.println("Invalid choice.");
+            }
+        }
+    }
+}
