@@ -1,21 +1,10 @@
 import java.util.*;
-
-// ─────────────────────────────────────────────
-//  INTERFACES
-// ─────────────────────────────────────────────
-
 interface Notifiable {
     void receiveNotification(String message);
 }
-
 interface Trackable {
     String getStatus();
 }
-
-// ─────────────────────────────────────────────
-//  ABSTRACT CLASS — User
-// ─────────────────────────────────────────────
-
 abstract class User implements Notifiable {
     protected String name;
     protected String userId;
@@ -46,7 +35,7 @@ class BookingRecord implements Trackable {
     double weightKg;
     String pickupLocation;
     String destination;
-    String status;          // "PENDING","ASSIGNED","CONFIRMED","IN_PROGRESS","COMPLETED"
+    String status;          
     String assignedDriverId;
     double fareAmount;
 
@@ -70,10 +59,6 @@ class BookingRecord implements Trackable {
             bookingId, weightKg, pickupLocation, destination, status, fareAmount);
     }
 }
-
-// ─────────────────────────────────────────────
-//  CLASS — Customer
-// ─────────────────────────────────────────────
 
 class Customer extends User {
 
@@ -144,10 +129,6 @@ class Customer extends User {
         System.out.println("╚═══════════════════════════════╝");
     }
 }
-
-// ─────────────────────────────────────────────
-//  CLASS — Driver
-// ─────────────────────────────────────────────
 
 class Driver extends User {
 
@@ -248,9 +229,6 @@ class Driver extends User {
     }
 }
 
-// ─────────────────────────────────────────────
-//  CLASS — Admin
-// ─────────────────────────────────────────────
 
 class Admin extends User {
 
@@ -403,9 +381,6 @@ public void registerDriverDirect(Driver driver) {
 }
 }
 
-// ─────────────────────────────────────────────
-//  CLASS — Vehicle  
-// ─────────────────────────────────────────────
 
 class Vehicle {
     public enum VehicleType { MINI_TRUCK, LARGE_TRUCK, TEMPO }
@@ -443,26 +418,16 @@ class Vehicle {
     }
 }
 
-// ─────────────────────────────────────────────
-//  MAIN — Interactive menu-driven system
-// ─────────────────────────────────────────────
-
 public class GoodsVehicleManagementSystem {
 
     static Scanner sc = new Scanner(System.in);
-
-    // Pre-created actors (in a real system you'd load from DB)
     static Admin    admin    = new Admin("Rajesh Kumar", "ADM01", "admin123");
     static Customer customer = new Customer("Arjun SP",  "CUST01", "cust123");
     static Driver   driver   = new Driver("Sarvesh S",   "DRV01",  "drv123");
     static Vehicle  vehicle  = new Vehicle("KL-14-AB-1234", Vehicle.VehicleType.MINI_TRUCK, 1000.0);
 
     public static void main(String[] args) {
-        // Pre-register the default driver so Admin can assign
         admin.receiveNotification("System started. Default driver Sarvesh S pre-loaded.");
-        // We manually add the pre-built driver to admin's list via a small helper
-        // (since registerDriver(Scanner) creates a new driver)
-        // Instead we expose a direct register:
         registerDefaultDriver();
 
         System.out.println("════════════════════════════════════════");
@@ -491,13 +456,11 @@ public class GoodsVehicleManagementSystem {
         sc.close();
     }
 
-    // ── Register pre-built driver into admin's list ──
     static void registerDefaultDriver() {
         // Directly use the overloaded version with a Driver object
         admin.registerDriverDirect(driver);
     }
 
-    // ── Admin flow ──────────────────────────────────────────────
     static void loginAndRunAdmin() {
         System.out.print("Enter Admin ID: ");
         String id = sc.nextLine();
@@ -527,7 +490,7 @@ public class GoodsVehicleManagementSystem {
         }
     }
 
-    // ── Customer flow ───────────────────────────────────────────
+  
     static void loginAndRunCustomer() {
         System.out.print("Enter Customer ID: ");
         String id = sc.nextLine();
@@ -566,7 +529,6 @@ public class GoodsVehicleManagementSystem {
         }
     }
 
-    // ── Driver flow ─────────────────────────────────────────────
     static void loginAndRunDriver() {
         System.out.print("Enter Driver ID: ");
         String id = sc.nextLine();
