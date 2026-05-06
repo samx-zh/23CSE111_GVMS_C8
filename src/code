@@ -457,7 +457,6 @@ public class GoodsVehicleManagementSystem {
     }
 
     static void registerDefaultDriver() {
-        // Directly use the overloaded version with a Driver object
         admin.registerDriverDirect(driver);
     }
 
